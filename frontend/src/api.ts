@@ -20,29 +20,43 @@ class ApiError extends Error {
   }
 }
 
+type DeliveryImportResult = {
+  imported: Delivery[]
+  errors: string[]
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const { headers: extraHeaders, body, ...rest } = options ?? {}
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData
+  const headers = new Headers({
+    Accept: 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+  })
+  if (extraHeaders) {
+    new Headers(extraHeaders).forEach((value, key) => {
+      headers.set(key, value)
+    })
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      ...(options?.headers ?? {}),
-    },
-    ...options,
+    ...rest,
+    headers,
+    body,
   })
 
   if (response.status === 204) {
     return undefined as T
   }
 
-  const body = (await response.json().catch(() => null)) as
+  const payload = (await response.json().catch(() => null)) as
     | T
     | { errors?: string[] }
     | null
 
   if (!response.ok) {
     const errors =
-      body && typeof body === 'object' && 'errors' in body
-        ? (body.errors ?? [])
+      payload && typeof payload === 'object' && 'errors' in payload
+        ? (payload.errors ?? [])
         : []
     throw new ApiError(
       errors[0] ?? `Request failed with ${response.status}`,
@@ -51,7 +65,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     )
   }
 
-  return body as T
+  return payload as T
 }
 
 export const addressesApi = {
@@ -92,6 +106,14 @@ export const deliveriesApi = {
       method: 'PATCH',
       body: JSON.stringify({ delivery: { status } }),
     }),
+  importCsv: (file: File) => {
+    const body = new FormData()
+    body.append('file', file)
+    return request<DeliveryImportResult>('/deliveries/import', {
+      method: 'POST',
+      body,
+    })
+  },
 }
 
 export { ApiError }

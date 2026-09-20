@@ -1,3 +1,5 @@
+require "csv"
+
 module Api
   module V1
     class DeliveriesController < ApplicationController
@@ -31,6 +33,13 @@ module Api
         else
           render json: { errors: delivery.errors.full_messages }, status: :unprocessable_content
         end
+      end
+
+      def import
+        result = DeliveryCsvImporter.new(params.require(:file)).call
+        render json: { imported: result.imported, errors: result.errors }
+      rescue CSV::MalformedCSVError => exception
+        render json: { errors: [ exception.message ] }, status: :bad_request
       end
 
       private

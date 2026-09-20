@@ -5,7 +5,9 @@ Rails.application.routes.draw do
     namespace :v1 do
       resources :todos
       resources :addresses, only: %i[index create update destroy]
-      resources :deliveries, only: %i[index create update]
+      resources :deliveries, only: %i[index create update] do
+        post :import, on: :collection
+      end
     end
   end
 end

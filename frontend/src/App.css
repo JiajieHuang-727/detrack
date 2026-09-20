@@ -5,7 +5,33 @@
 }
 
 .app-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 24px;
+}
+
+.header-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.header-actions {
+  flex-shrink: 0;
+  padding-bottom: 2px;
+}
+
+.import-csv {
+  padding: 10px 16px;
+  border: 0;
+  background: #9a3412;
+  color: #fff7ed;
+}
+
+.import-csv:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .eyebrow {
@@ -119,6 +145,15 @@
   color: #7c2d12;
 }
 
+.import-banner {
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.import-banner span {
+  white-space: pre-wrap;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -183,6 +218,15 @@
 @media (max-width: 720px) {
   .page {
     padding-top: 24px;
+  }
+
+  .app-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .import-csv {
+    width: 100%;
   }
 
   .composer,
