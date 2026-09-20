@@ -38,3 +38,9 @@ export type Delivery = {
   created_at: string
   updated_at: string
 }
+
+export type DeliveryHistory = {
+  id: number
+  status: DeliveryStatus
+  created_at: string
+}

@@ -1,4 +1,4 @@
-import type { Address, Delivery, DeliveryStatus } from './types'
+import type { Address, Delivery, DeliveryHistory, DeliveryStatus } from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1'
 
@@ -95,7 +95,10 @@ type DeliveryPayload = {
 }
 
 export const deliveriesApi = {
-  list: () => request<Delivery[]>('/deliveries'),
+  list: (status?: DeliveryStatus) => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : ''
+    return request<Delivery[]>(`/deliveries${query}`)
+  },
   create: (payload: DeliveryPayload) =>
     request<Delivery>('/deliveries', {
       method: 'POST',
@@ -106,6 +109,8 @@ export const deliveriesApi = {
       method: 'PATCH',
       body: JSON.stringify({ delivery: { status } }),
     }),
+  histories: (reference: string) =>
+    request<DeliveryHistory[]>(`/deliveries/${encodeURIComponent(reference)}/histories`),
   importCsv: (file: File) => {
     const body = new FormData()
     body.append('file', file)

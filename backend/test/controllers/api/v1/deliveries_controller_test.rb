@@ -30,6 +30,24 @@ class Api::V1::DeliveriesControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ newer.reference, older.reference ], refs
   end
 
+  test "index filters by status" do
+    Delivery.create!(attrs.merge(reference: "TV-CREATED", status: :created))
+    Delivery.create!(attrs.merge(reference: "TV-FAILED", status: :failed))
+
+    get api_v1_deliveries_url, params: { status: "failed" }
+
+    assert_response :success
+    refs = JSON.parse(response.body).pluck("reference")
+    assert_equal [ "TV-FAILED" ], refs
+  end
+
+  test "index rejects an unknown status" do
+    get api_v1_deliveries_url, params: { status: "pending" }
+
+    assert_response :bad_request
+    assert_includes JSON.parse(response.body)["errors"], "Status is not included in the list"
+  end
+
   test "create persists a delivery" do
     assert_difference("Delivery.count", 1) do
       post api_v1_deliveries_url, params: { delivery: attrs }, as: :json

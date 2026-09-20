@@ -4,7 +4,17 @@ module Api
   module V1
     class DeliveriesController < ApplicationController
       def index
-        render json: Delivery.includes(:address).order(created_at: :desc)
+        deliveries = Delivery.includes(:address).order(created_at: :desc)
+        if params[:status].present?
+          unless Delivery.statuses.key?(params[:status])
+            return render json: { errors: [ "Status is not included in the list" ] },
+              status: :bad_request
+          end
+
+          deliveries = deliveries.where(status: params[:status])
+        end
+
+        render json: deliveries
       end
 
       def create

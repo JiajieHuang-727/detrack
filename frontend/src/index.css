@@ -1,18 +1,19 @@
 :root {
+  --bs-primary: #9a3412;
+  --bs-primary-rgb: 154, 52, 18;
+  --bs-body-color: #221b16;
+  --bs-body-bg: #efe6d8;
+  --bs-secondary-color: #6b5d50;
+  --bs-border-color: #d8ccb8;
+  --bs-tertiary-bg: #faf6ef;
+  --bs-link-color: #9a3412;
+  --bs-link-hover-color: #7c2d12;
+  --bs-focus-ring-color: rgba(154, 52, 18, 0.35);
   font-family: 'Source Sans 3', 'Segoe UI', sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: #221b16;
-  background: #efe6d8;
-  line-height: 1.45;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
 }
 
 html,
@@ -28,17 +29,4 @@ body {
     radial-gradient(circle at 12% 8%, rgba(255, 250, 240, 0.9), transparent 28%),
     #efe6d8;
   color: #221b16;
-}
-
-button,
-input {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-a {
-  color: inherit;
 }

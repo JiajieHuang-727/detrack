@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_20_053700) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_20_070129) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -39,6 +39,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_20_053700) do
     t.index ["status"], name: "index_deliveries_on_status"
   end
 
+  create_table "delivery_histories", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "delivery_reference", null: false
+    t.enum "status", null: false, enum_type: "delivery_status"
+    t.index ["delivery_reference", "created_at"], name: "index_delivery_histories_on_delivery_reference_and_created_at"
+  end
+
   create_table "todos", force: :cascade do |t|
     t.boolean "completed", default: false, null: false
     t.datetime "created_at", null: false
@@ -49,4 +56,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_20_053700) do
   end
 
   add_foreign_key "deliveries", "addresses", on_delete: :restrict
+  add_foreign_key "delivery_histories", "deliveries", column: "delivery_reference", primary_key: "reference", on_delete: :cascade
 end

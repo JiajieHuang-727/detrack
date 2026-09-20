@@ -55,14 +55,15 @@ Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api` to Rail
 | `POST` | `/api/v1/addresses` | `{ "address": { "address": "25 Pitt St, Hurstville NSW", "lat": -33.949285, "long": 151.098093 } }` |
 | `PATCH` | `/api/v1/addresses/:id` | `{ "address": { "address": "...", "lat": -33.9, "long": 151.1 } }` |
 | `DELETE` | `/api/v1/addresses/:id` | |
-| `GET` | `/api/v1/deliveries` | |
+| `GET` | `/api/v1/deliveries` | optional `?status=created` |
 | `POST` | `/api/v1/deliveries` | `{ "delivery": { "reference": "TV-300001", "customer_name": "Coastal Electronics", "address": "25 Pitt St, Hurstville NSW", "time_window_start": "08:00", "time_window_end": "10:00" } }` |
 | `PATCH` | `/api/v1/deliveries/:reference` | `{ "delivery": { "status": "picked_up" } }` |
+| `GET` | `/api/v1/deliveries/:reference/histories` | |
 | `POST` | `/api/v1/deliveries/import` | multipart `file` (CSV) |
 
 Address `address` is required and unique. `lat` must be between -90 and 90. `long` must be between -180 and 180.
 
-New deliveries always start as `created`. The address must already exist in `addresses`. Status can only move `created → picked_up → in_transit → delivered`. Any status except `delivered` can move to `failed`.
+New deliveries always start as `created`. The address must already exist in `addresses`. Status can only move `created → picked_up → in_transit → delivered`. Any status except `delivered` can move to `failed`. `GET /api/v1/deliveries?status=` filters by one of those statuses. `GET /api/v1/deliveries/:reference/histories` returns that delivery’s status changes newest first (`id`, `status`, `created_at`); they are not embedded on the list endpoint.
 
 CSV import maps `pending` → `created`, `completed` → `delivered`, and `failed` → `failed`. Duplicate references are skipped and listed in `errors`. Existing addresses are reused by address string; missing addresses are created.
 

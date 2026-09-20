@@ -1,4 +1,12 @@
 import { useRef, useState } from 'react'
+import Alert from 'react-bootstrap/Alert'
+import Button from 'react-bootstrap/Button'
+import Collapse from 'react-bootstrap/Collapse'
+import Container from 'react-bootstrap/Container'
+import Nav from 'react-bootstrap/Nav'
+import Spinner from 'react-bootstrap/Spinner'
+import Toast from 'react-bootstrap/Toast'
+import ToastContainer from 'react-bootstrap/ToastContainer'
 import { ApiError, deliveriesApi } from './api'
 import { AddressPage } from './components/AddressPage'
 import { DeliveryPage } from './components/DeliveryPage'
@@ -15,23 +23,32 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabId>('address')
   const [refreshKey, setRefreshKey] = useState(0)
   const [importing, setImporting] = useState(false)
-  const [importError, setImportError] = useState<string | null>(null)
+  const [importErrors, setImportErrors] = useState<string[]>([])
+  const [importedCount, setImportedCount] = useState(0)
+  const [showImportDetails, setShowImportDetails] = useState(false)
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function importCsv(file: File) {
     setImporting(true)
-    setImportError(null)
+    setImportErrors([])
+    setImportedCount(0)
+    setShowImportDetails(false)
     try {
       const result = await deliveriesApi.importCsv(file)
       setRefreshKey((current) => current + 1)
-      if (result.errors.length > 0) {
-        setImportError(result.errors.join('\n'))
+      setImportedCount(result.imported.length)
+      setImportErrors(result.errors)
+      if (result.imported.length > 0) {
+        setToastMessage(`Imported ${result.imported.length} deliveries`)
       }
     } catch (cause) {
-      setImportError(
+      setImportErrors(
         cause instanceof ApiError
-          ? cause.errors.join('\n') || cause.message
-          : 'Could not import that CSV. Is the Rails API running on port 3000?',
+          ? cause.errors.length > 0
+            ? cause.errors
+            : [cause.message]
+          : ['Could not import that CSV. Is the Rails API running on port 3000?'],
       )
     } finally {
       setImporting(false)
@@ -39,26 +56,26 @@ function App() {
   }
 
   return (
-    <div className="page">
-      <header className="app-header">
-        <div className="header-copy">
-          <p className="eyebrow">React · Rails · PostgreSQL</p>
-          <nav className="tabs" aria-label="Pages">
+    <Container className="page py-4 py-md-5">
+      <div className="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
+        <div>
+          <p className="eyebrow mb-2">React · Rails · PostgreSQL</p>
+          <Nav
+            variant="tabs"
+            activeKey={activeTab}
+            onSelect={(key) => {
+              if (key === 'address' || key === 'deliveries') setActiveTab(key)
+            }}
+            aria-label="Pages"
+          >
             {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                className={activeTab === tab.id ? 'is-active' : undefined}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                {tab.label}
-              </button>
+              <Nav.Item key={tab.id}>
+                <Nav.Link eventKey={tab.id}>{tab.label}</Nav.Link>
+              </Nav.Item>
             ))}
-          </nav>
+          </Nav>
         </div>
-        <div className="header-actions">
+        <div>
           <input
             ref={fileInputRef}
             type="file"
@@ -70,31 +87,73 @@ function App() {
               if (file) void importCsv(file)
             }}
           />
-          <button
-            type="button"
-            className="import-csv"
-            disabled={importing}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {importing ? 'Importing…' : 'Import from CSV'}
-          </button>
+          <Button disabled={importing} onClick={() => fileInputRef.current?.click()}>
+            {importing ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Importing…
+              </>
+            ) : (
+              'Import from CSV'
+            )}
+          </Button>
         </div>
-      </header>
+      </div>
 
-      {importError && (
-        <div className="banner import-banner" role="alert">
-          <span>{importError}</span>
-          <button type="button" className="ghost" onClick={() => setImportError(null)}>
-            Dismiss
-          </button>
-        </div>
+      {importErrors.length > 0 && (
+        <Alert
+          variant="warning"
+          dismissible
+          onClose={() => {
+            setImportErrors([])
+            setImportedCount(0)
+          }}
+        >
+          <div className="d-flex justify-content-between align-items-start gap-3">
+            <div>
+              <Alert.Heading className="h6 mb-1">
+                {importedCount > 0
+                  ? `Imported ${importedCount}, skipped ${importErrors.length}`
+                  : `Skipped ${importErrors.length} rows`}
+              </Alert.Heading>
+              <Button
+                variant="link"
+                size="sm"
+                className="p-0"
+                onClick={() => setShowImportDetails((open) => !open)}
+                aria-expanded={showImportDetails}
+              >
+                {showImportDetails ? 'Hide details' : 'Show details'}
+              </Button>
+              <Collapse in={showImportDetails}>
+                <ul className="small mb-0 mt-2 ps-3 import-details">
+                  {importErrors.map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
+              </Collapse>
+            </div>
+          </div>
+        </Alert>
       )}
 
       <main>
         {activeTab === 'address' && <AddressPage key={refreshKey} />}
         {activeTab === 'deliveries' && <DeliveryPage key={refreshKey} />}
       </main>
-    </div>
+
+      <ToastContainer position="bottom-end" className="p-3">
+        <Toast
+          bg="success"
+          show={toastMessage !== null}
+          onClose={() => setToastMessage(null)}
+          delay={3200}
+          autohide
+        >
+          <Toast.Body className="text-white">{toastMessage}</Toast.Body>
+        </Toast>
+      </ToastContainer>
+    </Container>
   )
 }
 
