@@ -121,13 +121,13 @@ cd backend && bin/rails test
    Index: `(delivery_reference, created_at)`.
 
 2. Address management.
-   There are some possible solutions for managing address and lat lngs. One way is to use geocoder. However, I checked several data points in deliveries.csv and it does not match the google map result. So I used another way: let users to create available address in database and users can update existing addresses and delete unused addresses.
+   There are some possible solutions for managing address and lat lngs. One way is to use geocoder. However, I checked several data points in deliveries.csv and it does not match the Google Maps result. So I used another way: let users to create available address in database and users can update existing addresses and delete unused addresses.
 
    After `deliveries.address_id` became a foreign key, deleting an address has a few options: cascade (delete the deliveries too), set null (leave deliveries without coordinates; `address_id` is NOT NULL so this would also need a schema change), or restrict. An address can be shared by many deliveries, and those deliveries still need lat/lng, so I use `ON DELETE RESTRICT` / `dependent: :restrict_with_error`. The UI can delete an address only when no delivery uses it; otherwise the API returns 422. 
 
 3. Deliveries status management 
    3.1 manual create in UI
-      Users can create delivery in frontend. New deliveries can be created from frontend. And created deliveries all starts from status created. When create delivery from UI, the user can only use address exists in address table. (Means we support delivery to these addresses). And in web page the user can also update status, but the status it can update is restricted by the workflow created → picked_up → in_transit → delivered, with non delivered delivery can be changed to failed.
+      Users can create delivery in frontend. New deliveries can be created from frontend. And created deliveries all start from status created. When create delivery from UI, the user can only use address exists in address table. (Means we support delivery to these addresses). And in web page the user can also update status, but the status it can update is restricted by the workflow created → picked_up → in_transit → delivered, with non-delivered delivery can be changed to failed.
 
    3.2 import deliveries from csv. 
       For demo and batch creation, I add a button to import deliveries from csv file. The backend parses the csv and creates the delivery. In the product workflow status is created → picked_up → in_transit → delivered, however the csv file contains pending, failed, and completed. I map pending to created, completed to delivered, and failed to failed. Import can therefore create a delivery already delivered or failed; it does not walk the UI transition rules. When a row has a duplicate reference, an unknown status, or an invalid address/lat/lng, I skip that row, put the reason in `errors`, and keep processing remaining records. Unlike the create form, import may create a new address when the street is not already in `addresses`.
@@ -135,10 +135,10 @@ cd backend && bin/rails test
 4. Features introduced for user experience.
    I decide to introduce several features to improve the user experience
    4.1 
-      filter on deliveries.I enabled seach deliveres on reference, customer name and status.  Becaseu when delivery data grows, it is hard for user to find the delivery and update the status. So I let the user to search the delivery given the reference. 
+      filter on deliveries. I enabled search deliveries on reference, customer name and status. Because when delivery data grows, it is hard for user to find the delivery and update the status. So I let the user to search the delivery given the reference. 
    4.2 pagination
       I let the page to show at most 20 deliveries once at a time, so that it will not show too much for user to review and it will take too much time to load the data when there are a large amount of deliveries. Addresses use the same server-side pagination (`page`, `per_page`, default 20).
-   4.3 sorting based on fields. In the UI, the user can sort the deliveries based on fields. This will make user to see a more orgnized deliveries and quickly find the delivery it needs.
+   4.3 sorting based on fields. In the UI, the user can sort the deliveries based on fields. This will make user to see a more organized deliveries and quickly find the delivery it needs.
    4.4 resizable columns. Address and delivery tables let the user drag column widths so long streets and coordinates stay readable.
 
 5. Status history.
@@ -164,15 +164,15 @@ cd backend && bin/rails test
 
 2. Optimize the UI and UX of viewing history. There is still a problem that the view history button is pretty behind that it falls behind. And after you open the history, you need to roll forward to see the exact history.
 
-3. Enable updating and deleting existing deliveries. My current web page are built based on the assumption that once it is created, the fields like customers, address and window will not be modified or the delivery will be deleted. However, it is possible that the user needs to modify these fields and delete some deliveries. In these case, I will consider using soft delete with a `deleted_at` field (`updated_at` already exists on deliveries).
+3. Enable updating and deleting existing deliveries. My current web page are built based on the assumption that once it is created, the fields like customers, address and window will not be modified or the delivery will be deleted. However, it is possible that the user needs to modify these fields and delete some deliveries. In these cases, I will consider using soft delete with a `deleted_at` field (`updated_at` already exists on deliveries).
 
 ### out of scope yet but worth discussing:
 
 1. Real time update. My current web app does not support real time update. Which means if the status is updated from other source(like other user or other API call), the web app will not show the update immediately. 
 
-2. Geocoding. As discussed before, the address in deliveres does not quite match the lat lng in real world. But in production, it may be better UX if the user just need to put address and it maps to lat lng immediately.
+2. Geocoding. As discussed before, the address in deliveries does not quite match the lat lng in real world. But in production, it may be better UX if the user just need to put address and it maps to lat lng immediately.
 
-3. Address auto complete.  Currently in the create delivery form the address string needs to be exact match with an existing address in db. However, A better user experience is to use auto compelte to find a matching address.
+3. Address autocomplete. Currently in the create delivery form the address string needs to be exact match with an existing address in db. However, a better user experience is to use autocomplete to find a matching address.
 
 
 
@@ -182,11 +182,11 @@ AI tool: Use cursor with Cursor Grok 4.6
 
 The way I use AI: I first break the whole project into multiple small pieces. First I asked to build the address management page, I wrote the restrictions in prompt including the address should be unique and we should be able to update and delete addresses. I first asked the AI to work in plan mode and in each plan mode I asked to generate the to do list in data migration , backend front-end, and test order. I review the plan and confirm it. 
 
-Then I move to the second part, I suggest using address as the foreign key, however that raise a question that what affect will it make to delete a address if address.id is a foreign key of delivery. AI offered 3 solutions, restrict, cascade ad set null. I consider that an address may be shared by multiple deliveries and delete it may make a delivery invalid. So I take the restrict way and  write my delivery data schema in prompt and suggest the use case that an address that is used by a delivery should not be deleted.  And in prompt I also added the restriction of status transition flow that certain status can only be changed to certain status. As well, the AI generate the plan and after reviewing the plan, it generate the data migration, backend and frontend for me. When review, I checked specifically that the test case covers address deletion handling and status transition.
+Then I move to the second part, I suggest using address as the foreign key, however that raised a question that what effect will it make to delete an address if address.id is a foreign key of delivery. AI offered 3 solutions, restrict, cascade and set null. I consider that an address may be shared by multiple deliveries and delete it may make a delivery invalid. So I take the restrict way and  write my delivery data schema in prompt and suggest the use case that an address that is used by a delivery should not be deleted.  And in prompt I also added the restriction of status transition flow that certain status can only be changed to certain status. As well, the AI generated the plan and after reviewing the plan, it generated the data migration, backend and frontend for me. When review, I checked specifically that the test case covers address deletion handling and status transition.
 
-In the last for status history part, I wrote the behaviors and edge cases and data schema of status history including the history created when import from csv and create delivery and the place to put the status history and AI generate the API code and frontend code. 
+In the last for status history part, I wrote the behaviors and edge cases and data schema of status history including the history created when import from csv and create delivery and the place to put the status history and AI generated the API code and frontend code. 
 
-The thing that AI go wrong and how I caught it: 
+The thing that AI got wrong and how I caught it: 
 1. When first generating the add delivery feature, it generated with a field status, and you can select status like in transit and delivered when create a delivery. That is not my requirement so I let the AI to remove the status input box and use created as the default creation status.
 
 2. The first version of update status API does not consider concurrent issue. As discussed, concurrency issue may lead to illegal status update and invalid status history. The AI offered several solutions and I choose pessimistic lock because two requests collide on the same delivery, the transaction is short, and a 422 is the right outcome when the status has already moved. Optimistic locking would also stop lost updates, but retrying is a poor fit for a one-way status machine, and this app is not a high-QPS hot-row system where lock wait would matter.
