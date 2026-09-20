@@ -1,9 +1,29 @@
-export type Todo = {
+export type Address = {
   id: number
-  title: string
-  completed: boolean
+  address: string
+  lat: string | number
+  long: string | number
   created_at: string
   updated_at: string
 }
 
-export type Filter = 'all' | 'active' | 'completed'
+export const DELIVERY_STATUSES = [
+  'created',
+  'picked_up',
+  'in_transit',
+  'delivered',
+  'failed',
+] as const
+
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number]
+
+export type Delivery = {
+  reference: string
+  customer_name: string
+  address: string
+  status: DeliveryStatus
+  time_window_start: string | null
+  time_window_end: string | null
+  created_at: string
+  updated_at: string
+}

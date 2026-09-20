@@ -1,10 +1,11 @@
-import type { Todo } from './types'
+import type { Address, Delivery } from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1'
 
-type TodoPayload = {
-  title?: string
-  completed?: boolean
+type AddressPayload = {
+  address: string
+  lat: number
+  long: number
 }
 
 class ApiError extends Error {
@@ -53,21 +54,29 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return body as T
 }
 
-export const todosApi = {
-  list: () => request<Todo[]>('/todos'),
-  create: (title: string) =>
-    request<Todo>('/todos', {
+export const addressesApi = {
+  list: () => request<Address[]>('/addresses'),
+  create: (payload: AddressPayload) =>
+    request<Address>('/addresses', {
       method: 'POST',
-      body: JSON.stringify({ todo: { title } satisfies TodoPayload }),
+      body: JSON.stringify({ address: payload }),
     }),
-  update: (id: number, payload: TodoPayload) =>
-    request<Todo>(`/todos/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ todo: payload }),
-    }),
-  remove: (id: number) =>
-    request<void>(`/todos/${id}`, {
-      method: 'DELETE',
+}
+
+type DeliveryPayload = {
+  reference: string
+  customer_name: string
+  address: string
+  time_window_start: string
+  time_window_end: string
+}
+
+export const deliveriesApi = {
+  list: () => request<Delivery[]>('/deliveries'),
+  create: (payload: DeliveryPayload) =>
+    request<Delivery>('/deliveries', {
+      method: 'POST',
+      body: JSON.stringify({ delivery: payload }),
     }),
 }
 

@@ -10,9 +10,33 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_19_110100) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_19_133700) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  # Custom types defined in this database.
+  # Note that some types may not work with other database engines. Be careful if changing database.
+  create_enum "delivery_status", ["created", "picked_up", "in_transit", "delivered", "failed"]
+
+  create_table "addresses", force: :cascade do |t|
+    t.string "address", null: false
+    t.datetime "created_at", null: false
+    t.decimal "lat", precision: 10, scale: 6
+    t.decimal "long", precision: 10, scale: 6
+    t.datetime "updated_at", null: false
+    t.index ["address"], name: "index_addresses_on_address", unique: true
+  end
+
+  create_table "deliveries", primary_key: "reference", id: :string, force: :cascade do |t|
+    t.string "address", null: false
+    t.datetime "created_at", null: false
+    t.string "customer_name", null: false
+    t.enum "status", default: "created", null: false, enum_type: "delivery_status"
+    t.time "time_window_end"
+    t.time "time_window_start"
+    t.datetime "updated_at", null: false
+    t.index ["status"], name: "index_deliveries_on_status"
+  end
 
   create_table "todos", force: :cascade do |t|
     t.boolean "completed", default: false, null: false
