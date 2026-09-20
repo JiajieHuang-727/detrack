@@ -75,7 +75,7 @@ export const addressesApi = {
 type DeliveryPayload = {
   reference: string
   customer_name: string
-  address: string
+  address_id: number
   time_window_start: string
   time_window_end: string
 }

@@ -26,8 +26,14 @@ module Api
       end
 
       def destroy
-        @address.destroy!
-        head :no_content
+        if @address.destroy
+          head :no_content
+        else
+          render json: { errors: @address.errors.full_messages }, status: :unprocessable_content
+        end
+      rescue ActiveRecord::InvalidForeignKey
+        render json: { errors: [ "Cannot delete record because dependent deliveries exist" ] },
+          status: :unprocessable_content
       end
 
       private

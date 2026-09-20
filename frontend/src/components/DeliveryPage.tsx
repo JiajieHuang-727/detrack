@@ -23,7 +23,7 @@ export function DeliveryPage() {
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
   const [reference, setReference] = useState('')
   const [customerName, setCustomerName] = useState('')
-  const [address, setAddress] = useState('')
+  const [addressId, setAddressId] = useState<number | "">("")
   const [windowStart, setWindowStart] = useState('08:00')
   const [windowEnd, setWindowEnd] = useState('10:00')
   const [loading, setLoading] = useState(true)
@@ -42,9 +42,9 @@ export function DeliveryPage() {
       ])
       setRows(deliveries)
       setSavedAddresses(addresses)
-      setAddress((current) => {
-        if (current && addresses.some((item) => item.address === current)) return current
-        return addresses[0]?.address ?? ''
+      setAddressId((current) => {
+        if (current && addresses.some((item) => item.id === current)) return current
+        return addresses[0]?.id ?? ""
       })
     } catch (cause) {
       setError(
@@ -64,8 +64,8 @@ export function DeliveryPage() {
   const canSubmit =
     reference.trim().length > 0 &&
     customerName.trim().length > 0 &&
-    address.trim().length > 0 &&
-    savedAddresses.some((item) => item.address === address) &&
+    addressId !== "" &&
+    savedAddresses.some((item) => item.id === addressId) &&
     !saving
 
   async function addDelivery(event: FormEvent<HTMLFormElement>) {
@@ -78,14 +78,14 @@ export function DeliveryPage() {
       const created = await deliveriesApi.create({
         reference: reference.trim(),
         customer_name: customerName.trim(),
-        address: address.trim(),
+        address_id: Number(addressId),
         time_window_start: windowStart,
         time_window_end: windowEnd,
       })
       setRows((current) => [created, ...current])
       setReference('')
       setCustomerName('')
-      setAddress('')
+      setAddressId(savedAddresses[0]?.id ?? "")
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save that delivery.')
     } finally {
@@ -143,15 +143,17 @@ export function DeliveryPage() {
         <label className="wide">
           Address
           <select
-            value={address}
+            value={addressId === "" ? "" : String(addressId)}
             disabled={saving || savedAddresses.length === 0}
-            onChange={(event) => setAddress(event.target.value)}
+            onChange={(event) =>
+              setAddressId(event.target.value === "" ? "" : Number(event.target.value))
+            }
           >
             {savedAddresses.length === 0 ? (
               <option value="">Add an address first</option>
             ) : (
               savedAddresses.map((item) => (
-                <option key={item.id} value={item.address}>
+                <option key={item.id} value={item.id}>
                   {item.address}
                 </option>
               ))

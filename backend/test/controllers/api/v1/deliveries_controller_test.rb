@@ -6,14 +6,14 @@ class Api::V1::DeliveriesControllerTest < ActionDispatch::IntegrationTest
   end
 
   setup do
-    Address.create!(address: known_address, lat: -33.949285, long: 151.098093)
+    @address = Address.create!(address: known_address, lat: -33.949285, long: 151.098093)
   end
 
   def attrs(overrides = {})
     {
       reference: "TV-300001",
       customer_name: "Coastal Electronics",
-      address: "25 Pitt St, Hurstville NSW",
+      address_id: @address.id,
       time_window_start: "08:00",
       time_window_end: "10:00"
     }.merge(overrides)
@@ -39,6 +39,8 @@ class Api::V1::DeliveriesControllerTest < ActionDispatch::IntegrationTest
     body = JSON.parse(response.body)
     assert_equal "TV-300001", body["reference"]
     assert_equal "created", body["status"]
+    assert_equal @address.id, body["address_id"]
+    assert_equal known_address, body["address"]
     assert_equal "-33.949285", BigDecimal(body["lat"].to_s).to_s("F")
     assert_equal "151.098093", BigDecimal(body["long"].to_s).to_s("F")
   end
@@ -72,15 +74,15 @@ class Api::V1::DeliveriesControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_content
   end
 
-  test "create rejects an unknown address" do
+  test "create rejects an unknown address_id" do
     assert_no_difference("Delivery.count") do
       post api_v1_deliveries_url,
-        params: { delivery: attrs.merge(reference: "TV-UNKNOWN", address: "Nowhere St") },
+        params: { delivery: attrs.merge(reference: "TV-UNKNOWN", address_id: -1) },
         as: :json
     end
 
     assert_response :unprocessable_content
-    assert_includes JSON.parse(response.body)["errors"], "Address must match an existing address"
+    assert_includes JSON.parse(response.body)["errors"], "Address must exist"
   end
 
   test "update advances created to picked_up" do

@@ -28,5 +28,20 @@ class AddressTest < ActiveSupport::TestCase
     assert_not duplicate.valid?
     assert_includes duplicate.errors[:address], "has already been taken"
   end
+
+  test "cannot destroy an address used by a delivery" do
+    record = Address.create!(address: "25 Pitt St, Hurstville NSW", lat: -33.9, long: 151.1)
+    Delivery.create!(
+      reference: "TV-300001",
+      customer_name: "Coastal Electronics",
+      address_id: record.id
+    )
+
+    assert_not record.destroy
+    assert_includes record.errors.full_messages, "Cannot delete record because dependent deliveries exist"
+    assert Address.exists?(record.id)
+    assert Delivery.exists?("TV-300001")
+  end
 end
+
 

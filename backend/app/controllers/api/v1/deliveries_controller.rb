@@ -2,7 +2,7 @@ module Api
   module V1
     class DeliveriesController < ApplicationController
       def index
-        render json: Delivery.includes(:saved_address).order(created_at: :desc)
+        render json: Delivery.includes(:address).order(created_at: :desc)
       end
 
       def create
@@ -39,7 +39,7 @@ module Api
         params.expect(delivery: [
           :reference,
           :customer_name,
-          :address,
+          :address_id,
           :time_window_start,
           :time_window_end
         ])

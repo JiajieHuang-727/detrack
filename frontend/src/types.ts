@@ -28,6 +28,7 @@ export const DELIVERY_STATUS_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[
 export type Delivery = {
   reference: string
   customer_name: string
+  address_id: number
   address: string
   lat: string | number | null
   long: string | number | null

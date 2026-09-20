@@ -63,7 +63,7 @@ class Api::V1::AddressesControllerTest < ActionDispatch::IntegrationTest
     assert_equal BigDecimal("-33.811836"), record.lat
   end
 
-  test "destroy removes the address" do
+  test "destroy removes an unused address" do
     record = Address.create!(attrs)
 
     assert_difference("Address.count", -1) do
@@ -72,4 +72,28 @@ class Api::V1::AddressesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :no_content
   end
+
+  test "destroy rejects an address used by a delivery" do
+    record = Address.create!(attrs)
+    Delivery.create!(
+      reference: "TV-300001",
+      customer_name: "Coastal Electronics",
+      address_id: record.id,
+      time_window_start: "08:00",
+      time_window_end: "10:00"
+    )
+
+    assert_no_difference("Address.count") do
+      assert_no_difference("Delivery.count") do
+        delete api_v1_address_url(record)
+      end
+    end
+
+    assert_response :unprocessable_content
+    assert_includes JSON.parse(response.body)["errors"],
+      "Cannot delete record because dependent deliveries exist"
+    assert Address.exists?(record.id)
+    assert Delivery.exists?("TV-300001")
+  end
 end
+

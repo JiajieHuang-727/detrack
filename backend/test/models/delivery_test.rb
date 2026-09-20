@@ -6,14 +6,14 @@ class DeliveryTest < ActiveSupport::TestCase
   end
 
   setup do
-    Address.create!(address: known_address, lat: -33.949285, long: 151.098093)
+    @address = Address.create!(address: known_address, lat: -33.949285, long: 151.098093)
   end
 
   def valid_attrs
     {
       reference: "TV-300001",
       customer_name: "Coastal Electronics",
-      address: "25 Pitt St, Hurstville NSW",
+      address_id: @address.id,
       status: :created,
       time_window_start: "08:00",
       time_window_end: "10:00"
@@ -56,10 +56,10 @@ class DeliveryTest < ActiveSupport::TestCase
     assert_includes duplicate.errors.full_messages, "Reference TV-300001 already exists"
   end
 
-  test "invalid when address is not in addresses" do
-    delivery = Delivery.new(valid_attrs.merge(address: "Unknown St, Sydney NSW"))
+  test "invalid when address_id does not exist" do
+    delivery = Delivery.new(valid_attrs.merge(address_id: -1))
     assert_not delivery.valid?
-    assert_includes delivery.errors[:address], "must match an existing address"
+    assert_includes delivery.errors[:address], "must exist"
   end
 
   test "created can become picked_up or failed" do
