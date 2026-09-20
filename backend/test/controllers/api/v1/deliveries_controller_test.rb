@@ -116,6 +116,53 @@ class Api::V1::DeliveriesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 20, body["per_page"]
   end
 
+  test "index filters by reference" do
+    Delivery.create!(attrs.merge(reference: "TV-300001", customer_name: "Coastal Electronics"))
+    Delivery.create!(attrs.merge(reference: "TV-300002", customer_name: "Harbour Retail"))
+
+    get api_v1_deliveries_url, params: { reference: "300001" }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal [ "TV-300001" ], body["items"].pluck("reference")
+    assert_equal 1, body["total"]
+  end
+
+  test "index filters by customer" do
+    Delivery.create!(attrs.merge(reference: "TV-300001", customer_name: "Coastal Electronics"))
+    Delivery.create!(attrs.merge(reference: "TV-300002", customer_name: "Harbour Retail"))
+
+    get api_v1_deliveries_url, params: { customer: "harbour" }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal [ "TV-300002" ], body["items"].pluck("reference")
+  end
+
+  test "index treats blank reference and customer as all" do
+    Delivery.create!(attrs.merge(reference: "TV-300001"))
+    Delivery.create!(attrs.merge(reference: "TV-300002", customer_name: "Harbour Retail"))
+
+    get api_v1_deliveries_url, params: { reference: "  ", customer: "" }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal 2, body["total"]
+  end
+
+  test "index combines status, reference, and customer filters" do
+    Delivery.create!(attrs.merge(reference: "TV-300001", customer_name: "Coastal Electronics", status: :failed))
+    Delivery.create!(attrs.merge(reference: "TV-300011", customer_name: "Coastal Electronics", status: :created))
+    Delivery.create!(attrs.merge(reference: "TV-300002", customer_name: "Harbour Retail", status: :failed))
+
+    get api_v1_deliveries_url, params: { status: "failed", reference: "TV-300", customer: "Coastal" }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal [ "TV-300001" ], body["items"].pluck("reference")
+    assert_equal 1, body["total"]
+  end
+
   test "index rejects an unknown status" do
     get api_v1_deliveries_url, params: { status: "pending" }
 
@@ -176,6 +223,28 @@ class Api::V1::DeliveriesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_content
     assert_includes JSON.parse(response.body)["errors"], "Address must exist"
+  end
+
+  test "create accepts an existing address string" do
+    payload = attrs.except(:address_id).merge(reference: "TV-ADDR-STR", address: known_address)
+
+    post api_v1_deliveries_url, params: { delivery: payload }, as: :json
+
+    assert_response :created
+    body = JSON.parse(response.body)
+    assert_equal @address.id, body["address_id"]
+    assert_equal known_address, body["address"]
+  end
+
+  test "create rejects an unknown address string" do
+    payload = attrs.except(:address_id).merge(reference: "TV-NOWHERE", address: "Nowhere St")
+
+    assert_no_difference("Delivery.count") do
+      post api_v1_deliveries_url, params: { delivery: payload }, as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_includes JSON.parse(response.body)["errors"], "Address must match an existing address"
   end
 
   test "update advances created to picked_up" do
