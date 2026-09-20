@@ -3,8 +3,20 @@ require "csv"
 module Api
   module V1
     class DeliveriesController < ApplicationController
+      include Paginatable
+
+      SORT_COLUMNS = {
+        "reference" => { table: :deliveries, column: :reference },
+        "customer_name" => { table: :deliveries, column: :customer_name },
+        "address" => { table: :addresses, column: :address, join: true },
+        "lat" => { table: :addresses, column: :lat, join: true },
+        "long" => { table: :addresses, column: :long, join: true },
+        "status" => { table: :deliveries, column: :status },
+        "window" => { table: :deliveries, column: :time_window_start }
+      }.freeze
+
       def index
-        deliveries = Delivery.includes(:address).order(created_at: :desc)
+        deliveries = Delivery.includes(:address)
         if params[:status].present?
           unless Delivery.statuses.key?(params[:status])
             return render json: { errors: [ "Status is not included in the list" ] },
@@ -14,7 +26,7 @@ module Api
           deliveries = deliveries.where(status: params[:status])
         end
 
-        render json: deliveries
+        render json: paginated(sorted_deliveries(deliveries))
       end
 
       def create
@@ -53,6 +65,26 @@ module Api
       end
 
       private
+
+      def sorted_deliveries(scope)
+        sort = SORT_COLUMNS[params[:sort].to_s]
+        direction = params[:dir].to_s.downcase
+        invalid_dir = params[:dir].present? && !%w[asc desc].include?(direction)
+
+        if sort.nil? || invalid_dir
+          return scope.order(created_at: :desc, reference: :desc)
+        end
+
+        direction = direction == "desc" ? :desc : :asc
+        scope = scope.left_joins(:address) if sort[:join]
+
+        if params[:sort].to_s == "window"
+          return scope.order(time_window_start: direction, time_window_end: direction, reference: direction)
+        end
+
+        table = Arel::Table.new(sort[:table])
+        scope.order(table[sort[:column]].send(direction), Delivery.arel_table[:reference].send(direction))
+      end
 
       def delivery_params
         params.expect(delivery: [

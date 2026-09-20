@@ -1,4 +1,5 @@
-import type { Address, Delivery, DeliveryHistory, DeliveryStatus } from './types'
+import type { Address, Delivery, DeliveryHistory, DeliveryStatus, Paginated } from './types'
+import { PAGE_SIZE } from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1'
 
@@ -68,8 +69,29 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return payload as T
 }
 
+function toQuery(params: Record<string, string | number | undefined>) {
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === '') return
+    search.set(key, String(value))
+  })
+  const query = search.toString()
+  return query ? `?${query}` : ''
+}
+
+export type AddressListParams = {
+  page?: number
+  perPage?: number
+}
+
 export const addressesApi = {
-  list: () => request<Address[]>('/addresses'),
+  list: (params: AddressListParams = {}) =>
+    request<Paginated<Address>>(
+      `/addresses${toQuery({
+        page: params.page,
+        per_page: params.perPage,
+      })}`,
+    ),
   create: (payload: AddressPayload) =>
     request<Address>('/addresses', {
       method: 'POST',
@@ -94,11 +116,25 @@ type DeliveryPayload = {
   time_window_end: string
 }
 
+export type DeliveryListParams = {
+  page?: number
+  perPage?: number
+  status?: DeliveryStatus
+  sort?: string
+  dir?: 'asc' | 'desc'
+}
+
 export const deliveriesApi = {
-  list: (status?: DeliveryStatus) => {
-    const query = status ? `?status=${encodeURIComponent(status)}` : ''
-    return request<Delivery[]>(`/deliveries${query}`)
-  },
+  list: (params: DeliveryListParams = {}) =>
+    request<Paginated<Delivery>>(
+      `/deliveries${toQuery({
+        page: params.page,
+        per_page: params.perPage ?? PAGE_SIZE,
+        status: params.status,
+        sort: params.sort,
+        dir: params.dir,
+      })}`,
+    ),
   create: (payload: DeliveryPayload) =>
     request<Delivery>('/deliveries', {
       method: 'POST',

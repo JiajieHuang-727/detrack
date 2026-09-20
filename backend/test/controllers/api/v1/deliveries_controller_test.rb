@@ -26,8 +26,27 @@ class Api::V1::DeliveriesControllerTest < ActionDispatch::IntegrationTest
     get api_v1_deliveries_url
 
     assert_response :success
-    refs = JSON.parse(response.body).pluck("reference")
+    body = JSON.parse(response.body)
+    refs = body["items"].pluck("reference")
     assert_equal [ newer.reference, older.reference ], refs
+    assert_equal 1, body["page"]
+    assert_equal 20, body["per_page"]
+    assert_equal 2, body["total"]
+  end
+
+  test "index paginates deliveries" do
+    21.times do |index|
+      Delivery.create!(attrs.merge(reference: "TV-#{index.to_s.rjust(3, "0")}", created_at: index.minutes.ago))
+    end
+
+    get api_v1_deliveries_url, params: { page: 2, per_page: 20 }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal 1, body["items"].length
+    assert_equal 2, body["page"]
+    assert_equal 21, body["total"]
+    assert_equal 2, body["total_pages"]
   end
 
   test "index filters by status" do
@@ -37,8 +56,64 @@ class Api::V1::DeliveriesControllerTest < ActionDispatch::IntegrationTest
     get api_v1_deliveries_url, params: { status: "failed" }
 
     assert_response :success
-    refs = JSON.parse(response.body).pluck("reference")
+    body = JSON.parse(response.body)
+    refs = body["items"].pluck("reference")
     assert_equal [ "TV-FAILED" ], refs
+    assert_equal 1, body["total"]
+  end
+
+  test "index paginates a status filter" do
+    3.times do |index|
+      Delivery.create!(attrs.merge(reference: "TV-OK-#{index}", status: :created))
+    end
+    2.times do |index|
+      Delivery.create!(attrs.merge(reference: "TV-FAIL-#{index}", status: :failed))
+    end
+
+    get api_v1_deliveries_url, params: { status: "failed", page: 1, per_page: 1 }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal 1, body["items"].length
+    assert_equal 2, body["total"]
+    assert_equal 2, body["total_pages"]
+    assert_equal "failed", body["items"].first["status"]
+  end
+
+  test "index sorts by reference ascending then paginates" do
+    Delivery.create!(attrs.merge(reference: "TV-C"))
+    Delivery.create!(attrs.merge(reference: "TV-A"))
+    Delivery.create!(attrs.merge(reference: "TV-B"))
+
+    get api_v1_deliveries_url, params: { sort: "reference", dir: "asc", per_page: 2 }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal %w[TV-A TV-B], body["items"].pluck("reference")
+    assert_equal 3, body["total"]
+    assert_equal 2, body["total_pages"]
+  end
+
+  test "index ignores invalid sort and dir" do
+    older = Delivery.create!(attrs.merge(reference: "TV-OLD", created_at: 1.day.ago))
+    newer = Delivery.create!(attrs.merge(reference: "TV-NEW"))
+
+    get api_v1_deliveries_url, params: { sort: "nope", dir: "sideways" }
+
+    assert_response :success
+    refs = JSON.parse(response.body)["items"].pluck("reference")
+    assert_equal [ newer.reference, older.reference ], refs
+  end
+
+  test "index corrects invalid page and per_page" do
+    Delivery.create!(attrs)
+
+    get api_v1_deliveries_url, params: { page: -3, per_page: 0 }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal 1, body["page"]
+    assert_equal 20, body["per_page"]
   end
 
   test "index rejects an unknown status" do

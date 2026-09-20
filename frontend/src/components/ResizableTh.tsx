@@ -1,13 +1,24 @@
 import { useRef, type PointerEvent, type ReactNode } from 'react'
 
+export type SortDirection = 'asc' | 'desc'
+
 type ResizableThProps = {
   children?: ReactNode
   width: number
   onResize: (width: number) => void
   onResizeEnd?: () => void
+  sortDirection?: SortDirection | null
+  onSort?: () => void
 }
 
-export function ResizableTh({ children, width, onResize, onResizeEnd }: ResizableThProps) {
+export function ResizableTh({
+  children,
+  width,
+  onResize,
+  onResizeEnd,
+  sortDirection = null,
+  onSort,
+}: ResizableThProps) {
   const startX = useRef(0)
   const startWidth = useRef(width)
 
@@ -33,9 +44,37 @@ export function ResizableTh({ children, width, onResize, onResizeEnd }: Resizabl
     onResizeEnd?.()
   }
 
+  const sortable = Boolean(onSort)
+  const ariaSort =
+    sortDirection === 'asc' ? 'ascending' : sortDirection === 'desc' ? 'descending' : 'none'
+
   return (
-    <th className="resizable-th" style={{ width, minWidth: width }}>
-      <span className="resizable-th-label">{children}</span>
+    <th
+      className="resizable-th"
+      style={{ width, minWidth: width }}
+      aria-sort={sortable ? ariaSort : undefined}
+    >
+      {sortable ? (
+        <button
+          type="button"
+          className="sort-th-button"
+          aria-label={
+            typeof children === 'string'
+              ? sortDirection === 'asc'
+                ? `Sort ${children} descending`
+                : `Sort ${children} ascending`
+              : undefined
+          }
+          onClick={onSort}
+        >
+          <span className="resizable-th-label">{children}</span>
+          <span className="sort-indicator" aria-hidden="true">
+            {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : '↕'}
+          </span>
+        </button>
+      ) : (
+        <span className="resizable-th-label">{children}</span>
+      )}
       <span
         className="resize-handle"
         role="separator"

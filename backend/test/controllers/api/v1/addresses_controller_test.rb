@@ -16,8 +16,39 @@ class Api::V1::AddressesControllerTest < ActionDispatch::IntegrationTest
     get api_v1_addresses_url
 
     assert_response :success
-    names = JSON.parse(response.body).pluck("address")
+    body = JSON.parse(response.body)
+    names = body["items"].pluck("address")
     assert_equal [ newer.address, older.address ], names
+    assert_equal 1, body["page"]
+    assert_equal 20, body["per_page"]
+    assert_equal 2, body["total"]
+    assert_equal 1, body["total_pages"]
+  end
+
+  test "index paginates addresses" do
+    21.times do |index|
+      Address.create!(attrs.merge(address: "Street #{index}", created_at: index.minutes.ago))
+    end
+
+    get api_v1_addresses_url, params: { page: 2, per_page: 20 }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal 1, body["items"].length
+    assert_equal 2, body["page"]
+    assert_equal 21, body["total"]
+    assert_equal 2, body["total_pages"]
+  end
+
+  test "index corrects invalid page and per_page" do
+    Address.create!(attrs)
+
+    get api_v1_addresses_url, params: { page: 0, per_page: 1000 }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal 1, body["page"]
+    assert_equal 100, body["per_page"]
   end
 
   test "create persists an address" do

@@ -12,11 +12,13 @@ import { addressesApi, ApiError, deliveriesApi } from '../api'
 import {
   DELIVERY_STATUSES,
   DELIVERY_STATUS_TRANSITIONS,
+  PAGE_SIZE,
   type Address,
   type Delivery,
   type DeliveryHistory,
   type DeliveryStatus,
 } from '../types'
+import { PaginationBar } from './PaginationBar'
 import { ColumnGroup, ResizableTh } from './ResizableTh'
 import { useColumnWidths } from './useColumnWidths'
 
@@ -41,6 +43,9 @@ function formatTimestamp(value: string) {
 function statusLabel(status: string) {
   return status.replaceAll('_', ' ')
 }
+
+type SortKey = 'reference' | 'customer_name' | 'address' | 'lat' | 'long' | 'status' | 'window'
+type SortDirection = 'asc' | 'desc'
 
 const STATUS_BADGE: Record<DeliveryStatus, string> = {
   created: 'status-created',
@@ -73,6 +78,11 @@ export function DeliveryPage() {
   const [pendingRef, setPendingRef] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<DeliveryStatus | ''>('')
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   const [historyRef, setHistoryRef] = useState<string | null>(null)
   const [histories, setHistories] = useState<DeliveryHistory[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -82,24 +92,34 @@ export function DeliveryPage() {
     130, 170, 240, 110, 110, 120, 120, 280,
   ])
 
-  const loadDeliveries = useCallback(async () => {
-    setRows(await deliveriesApi.list(statusFilter || undefined))
-  }, [statusFilter])
+  const loadDeliveries = useCallback(async (pageNum = page) => {
+    const result = await deliveriesApi.list({
+      page: pageNum,
+      perPage: PAGE_SIZE,
+      status: statusFilter || undefined,
+      sort: sortKey ?? undefined,
+      dir: sortKey ? sortDirection : undefined,
+    })
+    setRows(result.items)
+    setPage(result.page)
+    setTotal(result.total)
+    setTotalPages(result.total_pages)
+  }, [page, statusFilter, sortKey, sortDirection])
+
+  const loadAddresses = useCallback(async () => {
+    const addresses = await addressesApi.list({ page: 1, perPage: 100 })
+    setSavedAddresses(addresses.items)
+    setAddressId((current) => {
+      if (current && addresses.items.some((item) => item.id === current)) return current
+      return addresses.items[0]?.id ?? ""
+    })
+  }, [])
 
   const load = useCallback(async () => {
     setError(null)
     setLoading(true)
     try {
-      const [deliveries, addresses] = await Promise.all([
-        deliveriesApi.list(statusFilter || undefined),
-        addressesApi.list(),
-      ])
-      setRows(deliveries)
-      setSavedAddresses(addresses)
-      setAddressId((current) => {
-        if (current && addresses.some((item) => item.id === current)) return current
-        return addresses[0]?.id ?? ""
-      })
+      await Promise.all([loadDeliveries(), loadAddresses()])
     } catch (cause) {
       setError(
         cause instanceof ApiError
@@ -109,11 +129,52 @@ export function DeliveryPage() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter])
+  }, [loadAddresses, loadDeliveries])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void loadAddresses().catch((cause) => {
+      setError(
+        cause instanceof ApiError
+          ? cause.message
+          : 'Could not reach the Rails API. Is it running on port 3000?',
+      )
+    })
+  }, [loadAddresses])
+
+  useEffect(() => {
+    let cancelled = false
+    setError(null)
+    setLoading(true)
+    loadDeliveries()
+      .catch((cause) => {
+        if (cancelled) return
+        setError(
+          cause instanceof ApiError
+            ? cause.message
+            : 'Could not reach the Rails API. Is it running on port 3000?',
+        )
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [loadDeliveries])
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDirection('asc')
+    }
+    setPage(1)
+  }
+
+  function headerSort(key: SortKey): SortDirection | null {
+    return sortKey === key ? sortDirection : null
+  }
 
   const canSubmit =
     reference.trim().length > 0 &&
@@ -136,7 +197,7 @@ export function DeliveryPage() {
         time_window_start: windowStart,
         time_window_end: windowEnd,
       })
-      await loadDeliveries()
+      await loadDeliveries(1)
       setReference('')
       setCustomerName('')
       setAddressId(savedAddresses[0]?.id ?? "")
@@ -304,9 +365,10 @@ export function DeliveryPage() {
             value={statusFilter}
             style={{ maxWidth: 220 }}
             aria-label="Filter deliveries by status"
-            onChange={(event) =>
+            onChange={(event) => {
               setStatusFilter((event.target.value || '') as DeliveryStatus | '')
-            }
+              setPage(1)
+            }}
           >
             <option value="">All</option>
             {DELIVERY_STATUSES.map((status) => (
@@ -331,25 +393,67 @@ export function DeliveryPage() {
         <ColumnGroup widths={widths} />
         <thead>
           <tr>
-            <ResizableTh width={widths[0]} onResize={(width) => setWidth(0, width)} onResizeEnd={commit}>
+            <ResizableTh
+              width={widths[0]}
+              onResize={(width) => setWidth(0, width)}
+              onResizeEnd={commit}
+              sortDirection={headerSort('reference')}
+              onSort={() => toggleSort('reference')}
+            >
               Reference
             </ResizableTh>
-            <ResizableTh width={widths[1]} onResize={(width) => setWidth(1, width)} onResizeEnd={commit}>
+            <ResizableTh
+              width={widths[1]}
+              onResize={(width) => setWidth(1, width)}
+              onResizeEnd={commit}
+              sortDirection={headerSort('customer_name')}
+              onSort={() => toggleSort('customer_name')}
+            >
               Customer
             </ResizableTh>
-            <ResizableTh width={widths[2]} onResize={(width) => setWidth(2, width)} onResizeEnd={commit}>
+            <ResizableTh
+              width={widths[2]}
+              onResize={(width) => setWidth(2, width)}
+              onResizeEnd={commit}
+              sortDirection={headerSort('address')}
+              onSort={() => toggleSort('address')}
+            >
               Address
             </ResizableTh>
-            <ResizableTh width={widths[3]} onResize={(width) => setWidth(3, width)} onResizeEnd={commit}>
+            <ResizableTh
+              width={widths[3]}
+              onResize={(width) => setWidth(3, width)}
+              onResizeEnd={commit}
+              sortDirection={headerSort('lat')}
+              onSort={() => toggleSort('lat')}
+            >
               Lat
             </ResizableTh>
-            <ResizableTh width={widths[4]} onResize={(width) => setWidth(4, width)} onResizeEnd={commit}>
+            <ResizableTh
+              width={widths[4]}
+              onResize={(width) => setWidth(4, width)}
+              onResizeEnd={commit}
+              sortDirection={headerSort('long')}
+              onSort={() => toggleSort('long')}
+            >
               Lng
             </ResizableTh>
-            <ResizableTh width={widths[5]} onResize={(width) => setWidth(5, width)} onResizeEnd={commit}>
+            <ResizableTh
+              width={widths[5]}
+              onResize={(width) => setWidth(5, width)}
+              onResizeEnd={commit}
+              sortDirection={headerSort('status')}
+              onSort={() => toggleSort('status')}
+            >
               Status
             </ResizableTh>
-            <ResizableTh width={widths[6]} onResize={(width) => setWidth(6, width)} onResizeEnd={commit}>
+            <ResizableTh
+              width={widths[6]}
+              onResize={(width) => setWidth(6, width)}
+              onResizeEnd={commit}
+              sortDirection={headerSort('window')}
+              onSort={() => toggleSort('window')}
+            >
               Window
             </ResizableTh>
             <ResizableTh width={widths[7]} onResize={(width) => setWidth(7, width)} onResizeEnd={commit} />
@@ -494,6 +598,13 @@ export function DeliveryPage() {
           )}
         </tbody>
       </Table>
+      <PaginationBar
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        disabled={loading || pendingRef !== null}
+        onPageChange={setPage}
+      />
     </Card>
   )
 }

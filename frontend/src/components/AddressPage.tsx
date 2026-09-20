@@ -8,8 +8,9 @@ import Row from 'react-bootstrap/Row'
 import Spinner from 'react-bootstrap/Spinner'
 import Table from 'react-bootstrap/Table'
 import { addressesApi, ApiError } from '../api'
-import type { Address } from '../types'
+import { PAGE_SIZE, type Address } from '../types'
 import { ColumnGroup, ResizableTh } from './ResizableTh'
+import { PaginationBar } from './PaginationBar'
 import { useColumnWidths } from './useColumnWidths'
 
 function formatCoord(value: string | number) {
@@ -33,6 +34,9 @@ function draftFrom(row: Address): Draft {
 
 export function AddressPage() {
   const [rows, setRows] = useState<Address[]>([])
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   const [address, setAddress] = useState('')
   const [lat, setLat] = useState('')
   const [lng, setLng] = useState('')
@@ -44,10 +48,17 @@ export function AddressPage() {
   const [error, setError] = useState<string | null>(null)
   const { widths, setWidth, commit } = useColumnWidths('address-table-widths', [420, 140, 140, 180])
 
+  const applyPage = useCallback((result: { items: Address[]; page: number; total: number; total_pages: number }) => {
+    setRows(result.items)
+    setPage(result.page)
+    setTotal(result.total)
+    setTotalPages(result.total_pages)
+  }, [])
+
   const load = useCallback(async () => {
     setError(null)
     try {
-      setRows(await addressesApi.list())
+      applyPage(await addressesApi.list({ page, perPage: PAGE_SIZE }))
     } catch (cause) {
       setError(
         cause instanceof ApiError
@@ -57,7 +68,7 @@ export function AddressPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [applyPage, page])
 
   useEffect(() => {
     void load()
@@ -86,12 +97,12 @@ export function AddressPage() {
     setSaving(true)
     setError(null)
     try {
-      const created = await addressesApi.create({
+      await addressesApi.create({
         address: address.trim(),
         lat: Number(lat),
         long: Number(lng),
       })
-      setRows((current) => [created, ...current])
+      applyPage(await addressesApi.list({ page: 1, perPage: PAGE_SIZE }))
       setAddress('')
       setLat('')
       setLng('')
@@ -137,8 +148,9 @@ export function AddressPage() {
     setError(null)
     try {
       await addressesApi.remove(row.id)
-      setRows((current) => current.filter((item) => item.id !== row.id))
       if (editingId === row.id) setEditingId(null)
+      const nextPage = rows.length === 1 && page > 1 ? page - 1 : page
+      applyPage(await addressesApi.list({ page: nextPage, perPage: PAGE_SIZE }))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not delete that address.')
     } finally {
@@ -342,6 +354,13 @@ export function AddressPage() {
           )}
         </tbody>
       </Table>
+      <PaginationBar
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        disabled={loading || pendingId !== null}
+        onPageChange={setPage}
+      />
     </Card>
   )
 }

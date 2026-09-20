@@ -44,3 +44,13 @@ export type DeliveryHistory = {
   status: DeliveryStatus
   created_at: string
 }
+
+export type Paginated<T> = {
+  items: T[]
+  page: number
+  per_page: number
+  total: number
+  total_pages: number
+}
+
+export const PAGE_SIZE = 20

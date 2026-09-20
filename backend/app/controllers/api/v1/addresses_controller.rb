@@ -1,10 +1,12 @@
 module Api
   module V1
     class AddressesController < ApplicationController
+      include Paginatable
+
       before_action :set_address, only: %i[update destroy]
 
       def index
-        render json: Address.order(created_at: :desc)
+        render json: paginated(Address.order(created_at: :desc, id: :desc))
       end
 
       def create
