@@ -1,6 +1,6 @@
-# Ledger
+# Delivery Status Tracker
 
-An address book with a **React** frontend, a **Ruby on Rails** JSON API, and **PostgreSQL**.
+A delivery tracker with a **React** frontend, a **Ruby on Rails** JSON API, and **PostgreSQL**.
 
 ```
 frontend (Vite, :5173)  →  /api/v1/*  →  backend (Rails, :3000)  →  PostgreSQL
@@ -49,23 +49,27 @@ Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api` to Rail
 
 ## API
 
-| Method | Path | Body |
+| Method | Path | Query / body |
 | --- | --- | --- |
-| `GET` | `/api/v1/addresses` | |
+| `GET` | `/api/v1/addresses` | `?page=&per_page=` |
 | `POST` | `/api/v1/addresses` | `{ "address": { "address": "25 Pitt St, Hurstville NSW", "lat": -33.949285, "long": 151.098093 } }` |
 | `PATCH` | `/api/v1/addresses/:id` | `{ "address": { "address": "...", "lat": -33.9, "long": 151.1 } }` |
 | `DELETE` | `/api/v1/addresses/:id` | |
-| `GET` | `/api/v1/deliveries` | optional `?status=created` |
+| `GET` | `/api/v1/deliveries` | `?status=&reference=&customer=&page=&per_page=&sort=&dir=` |
 | `POST` | `/api/v1/deliveries` | `{ "delivery": { "reference": "TV-300001", "customer_name": "Coastal Electronics", "address": "25 Pitt St, Hurstville NSW", "time_window_start": "08:00", "time_window_end": "10:00" } }` |
 | `PATCH` | `/api/v1/deliveries/:reference` | `{ "delivery": { "status": "picked_up" } }` |
 | `GET` | `/api/v1/deliveries/:reference/histories` | |
 | `POST` | `/api/v1/deliveries/import` | multipart `file` (CSV) |
 
-Address `address` is required and unique. `lat` must be between -90 and 90. `long` must be between -180 and 180.
+List endpoints return `{ items, page, per_page, total, total_pages }`. `page` defaults to 1. `per_page` defaults to 20 (max 100).
 
-New deliveries always start as `created`. The address must already exist in `addresses`. Status can only move `created → picked_up → in_transit → delivered`. Any status except `delivered` can move to `failed`. `GET /api/v1/deliveries?status=` filters by one of those statuses. `GET /api/v1/deliveries/:reference/histories` returns that delivery’s status changes newest first (`id`, `status`, `created_at`); they are not embedded on the list endpoint.
+`GET /api/v1/deliveries` filters are optional and combine: `status` (exact enum), `reference` and `customer` (case-insensitive substring). `sort` is one of `reference`, `customer_name`, `address`, `lat`, `long`, `status`, `window`; `dir` is `asc` or `desc`. Unknown sort/dir falls back to newest `created_at` then `reference`.
 
-CSV import maps `pending` → `created`, `completed` → `delivered`, and `failed` → `failed`. Duplicate references are skipped and listed in `errors`. Existing addresses are reused by address string; missing addresses are created.
+Address `address` is required and unique. `lat` must be between -90 and 90. `long` must be between -180 and 180. `DELETE` fails with 422 if deliveries still use that address.
+
+`POST /api/v1/deliveries` always starts as `created`. The address string must already exist in `addresses`. `PATCH` only changes `status`. Status can only move `created → picked_up → in_transit → delivered`. Any status except `delivered` can move to `failed`. `GET /api/v1/deliveries/:reference/histories` returns that delivery’s status changes newest first (`id`, `status`, `created_at`); they are not embedded on the list endpoint.
+
+CSV import maps `pending` → `created`, `completed` → `delivered`, and `failed` → `failed`, and can insert a delivery already in `delivered` or `failed` without walking the UI workflow. Duplicate references, unknown statuses, and invalid addresses are skipped and listed in `errors`; remaining rows still import. Existing addresses are reused by address string; missing addresses are created from the CSV lat/lng.
 
 ## Tests
 
@@ -117,23 +121,28 @@ cd backend && bin/rails test
    Index: `(delivery_reference, created_at)`.
 
 2. Address management.
-   There are some possible solutions for managing address and lat lngs. One way is to use geocoder. However, I checked several data points in deliveries.csv and it does not match the google map result. So I used another way: let users to create available address in database and users can update existing addresses and delete unused addresses. 
+   There are some possible solutions for managing address and lat lngs. One way is to use geocoder. However, I checked several data points in deliveries.csv and it does not match the google map result. So I used another way: let users to create available address in database and users can update existing addresses and delete unused addresses.
+
+   After `deliveries.address_id` became a foreign key, deleting an address has a few options: cascade (delete the deliveries too), set null (leave deliveries without coordinates; `address_id` is NOT NULL so this would also need a schema change), or restrict. An address can be shared by many deliveries, and those deliveries still need lat/lng, so I use `ON DELETE RESTRICT` / `dependent: :restrict_with_error`. The UI can delete an address only when no delivery uses it; otherwise the API returns 422. 
 
 3. Deliveries status management 
    3.1 manual create in UI
       Users can create delivery in frontend. New deliveries can be created from frontend. And created deliveries all starts from status created. When create delivery from UI, the user can only use address exists in address table. (Means we support delivery to these addresses). And in web page the user can also update status, but the status it can update is restricted by the workflow created → picked_up → in_transit → delivered, with non delivered delivery can be changed to failed.
 
    3.2 import deliveries from csv. 
-      For demo and batch creation, I add a button to import deliveries from csv file. And the backend  will parse the csv file and create  the delivery. In document the status is named created → picked_up → in_transit → delivered,, however, the csv file contains status pending, failed, and completed. So based on my understanding, I map pending to created, completed to delievered. And when one line of record violates reference unique restriction, I skip that row,  and include in error message that this row is skipped because of reference duplicate and keep processing remaining records. And  
-      
+      For demo and batch creation, I add a button to import deliveries from csv file. The backend parses the csv and creates the delivery. In the product workflow status is created → picked_up → in_transit → delivered, however the csv file contains pending, failed, and completed. I map pending to created, completed to delivered, and failed to failed. Import can therefore create a delivery already delivered or failed; it does not walk the UI transition rules. When a row has a duplicate reference, an unknown status, or an invalid address/lat/lng, I skip that row, put the reason in `errors`, and keep processing remaining records. Unlike the create form, import may create a new address when the street is not already in `addresses`.
 
 4. Features introduced for user experience.
    I decide to introduce several features to improve the user experience
    4.1 
       filter on deliveries.I enabled seach deliveres on reference, customer name and status.  Becaseu when delivery data grows, it is hard for user to find the delivery and update the status. So I let the user to search the delivery given the reference. 
-   4.2 paganation
-      I let the page to show at most 20 deliveries once at a time, so that it will not show too much for user to review and it will take too much time to load the data when there are a large amount of deliveries.
+   4.2 pagination
+      I let the page to show at most 20 deliveries once at a time, so that it will not show too much for user to review and it will take too much time to load the data when there are a large amount of deliveries. Addresses use the same server-side pagination (`page`, `per_page`, default 20).
    4.3 sorting based on fields. In the UI, the user can sort the deliveries based on fields. This will make user to see a more orgnized deliveries and quickly find the delivery it needs.
+   4.4 resizable columns. Address and delivery tables let the user drag column widths so long streets and coordinates stay readable.
+
+5. Status history.
+   Each status change appends one `delivery_histories` row (`delivery_reference`, `status`, `created_at`). Creating from the UI writes `created`. CSV import writes the mapped import status. A later PATCH writes the new status. The frontend has a View history control on each delivery; it fetches `GET /api/v1/deliveries/:reference/histories` and shows newest first under the row.
 
 6. Concurrency issue.
    Different users (or two browser tabs) can PATCH the same delivery status at the same time. Puma is multi-threaded, so two requests can both read the old status, both pass the transition check, and the last write wins. Example: both see `in_transit`; one updates to `delivered` and the other to `failed`. Without a lock, the package can end up `failed` after it was already delivered, and `delivery_histories` records both changes as if they were a valid path.
@@ -147,7 +156,7 @@ cd backend && bin/rails test
    The UI can still be stale: the dropdown is built from the list the user already loaded. A rejected update is a UX issue, not corrupted data; refresh shows the latest status. 
 
 7. UI design:
-   Use bootstrap to make the UI look prettier. It offers prettier button for add, save, import, previous and next. Offer alert and Toast for import success and failure and a colored badge for different status.
+   Use bootstrap to make the UI look prettier. It offers prettier button for add, save, import, previous and next. Offer alert and Toast for import success and failure and a colored badge for different status. Tabs, forms, tables, and loading spinners also come from Bootstrap / react-bootstrap. Column resize is custom CSS, not a Bootstrap component.
 
 
 ### What I will do next:
@@ -155,7 +164,7 @@ cd backend && bin/rails test
 
 2. Optimize the UI and UX of viewing history. There is still a problem that the view history button is pretty behind that it falls behind. And after you open the history, you need to roll forward to see the exact history.
 
-3. Enable updating and deleting existing deliveries. My current web page are built based on the assumption that once it is created, the fields like customers , address and windown will not be modified or the delivery will be deleted. However, it is possible that the user needs to modify these fields and delete some deliveries. In these case, I will consider using soft delete by introducing updated_at and deleted_at fields.
+3. Enable updating and deleting existing deliveries. My current web page are built based on the assumption that once it is created, the fields like customers, address and window will not be modified or the delivery will be deleted. However, it is possible that the user needs to modify these fields and delete some deliveries. In these case, I will consider using soft delete with a `deleted_at` field (`updated_at` already exists on deliveries).
 
 ### out of scope yet but worth discussing:
 
