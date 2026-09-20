@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { ApiError, deliveriesApi } from '../api'
-import type { Delivery } from '../types'
+import { addressesApi, ApiError, deliveriesApi } from '../api'
+import { DELIVERY_STATUS_TRANSITIONS, type Address, type Delivery, type DeliveryStatus } from '../types'
 
 function formatTime(value: string | null) {
   if (!value) return '—'
   const match = value.match(/(\d{2}:\d{2})/)
   return match?.[1] ?? value
+}
+
+function formatCoord(value: string | number | null) {
+  if (value === null || value === undefined || value === '') return '—'
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric.toString() : String(value)
 }
 
 function statusLabel(status: string) {
@@ -14,6 +20,7 @@ function statusLabel(status: string) {
 
 export function DeliveryPage() {
   const [rows, setRows] = useState<Delivery[]>([])
+  const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
   const [reference, setReference] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [address, setAddress] = useState('')
@@ -21,12 +28,24 @@ export function DeliveryPage() {
   const [windowEnd, setWindowEnd] = useState('10:00')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [updatingRef, setUpdatingRef] = useState<string | null>(null)
+  const [nextStatus, setNextStatus] = useState<DeliveryStatus>('picked_up')
+  const [pendingRef, setPendingRef] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setError(null)
     try {
-      setRows(await deliveriesApi.list())
+      const [deliveries, addresses] = await Promise.all([
+        deliveriesApi.list(),
+        addressesApi.list(),
+      ])
+      setRows(deliveries)
+      setSavedAddresses(addresses)
+      setAddress((current) => {
+        if (current && addresses.some((item) => item.address === current)) return current
+        return addresses[0]?.address ?? ''
+      })
     } catch (cause) {
       setError(
         cause instanceof ApiError
@@ -46,6 +65,7 @@ export function DeliveryPage() {
     reference.trim().length > 0 &&
     customerName.trim().length > 0 &&
     address.trim().length > 0 &&
+    savedAddresses.some((item) => item.address === address) &&
     !saving
 
   async function addDelivery(event: FormEvent<HTMLFormElement>) {
@@ -70,6 +90,30 @@ export function DeliveryPage() {
       setError(cause instanceof Error ? cause.message : 'Could not save that delivery.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  function startUpdate(row: Delivery) {
+    const options = DELIVERY_STATUS_TRANSITIONS[row.status]
+    if (options.length === 0) return
+    setUpdatingRef(row.reference)
+    setNextStatus(row.status)
+    setError(null)
+  }
+
+  async function confirmUpdate(row: Delivery) {
+    setPendingRef(row.reference)
+    setError(null)
+    try {
+      const updated = await deliveriesApi.updateStatus(row.reference, nextStatus)
+      setRows((current) =>
+        current.map((item) => (item.reference === row.reference ? updated : item)),
+      )
+      setUpdatingRef(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not update that delivery.')
+    } finally {
+      setPendingRef(null)
     }
   }
 
@@ -98,13 +142,21 @@ export function DeliveryPage() {
         </label>
         <label className="wide">
           Address
-          <input
+          <select
             value={address}
-            placeholder="25 Pitt St, Hurstville NSW"
-            autoComplete="off"
-            disabled={saving}
+            disabled={saving || savedAddresses.length === 0}
             onChange={(event) => setAddress(event.target.value)}
-          />
+          >
+            {savedAddresses.length === 0 ? (
+              <option value="">Add an address first</option>
+            ) : (
+              savedAddresses.map((item) => (
+                <option key={item.id} value={item.address}>
+                  {item.address}
+                </option>
+              ))
+            )}
+          </select>
         </label>
         <label>
           Start
@@ -145,35 +197,97 @@ export function DeliveryPage() {
               <th>Reference</th>
               <th>Customer</th>
               <th>Address</th>
+              <th>Lat</th>
+              <th>Lng</th>
               <th>Status</th>
               <th>Window</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="empty">
+                <td colSpan={8} className="empty">
                   Loading deliveries from Postgres…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="empty">
+                <td colSpan={8} className="empty">
                   Nothing stored yet. Use the form above to add the first row.
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr key={row.reference}>
-                  <td>{row.reference}</td>
-                  <td>{row.customer_name}</td>
-                  <td>{row.address}</td>
-                  <td>{statusLabel(row.status)}</td>
-                  <td className="numeric">
-                    {formatTime(row.time_window_start)}–{formatTime(row.time_window_end)}
-                  </td>
-                </tr>
-              ))
+              rows.map((row) => {
+                const nextStatuses = DELIVERY_STATUS_TRANSITIONS[row.status]
+                const updating = updatingRef === row.reference
+                const busy = pendingRef === row.reference
+
+                return (
+                  <tr key={row.reference}>
+                    <td>{row.reference}</td>
+                    <td>{row.customer_name}</td>
+                    <td>{row.address}</td>
+                    <td className="numeric">{formatCoord(row.lat)}</td>
+                    <td className="numeric">{formatCoord(row.long)}</td>
+                    <td>
+                      {updating ? (
+                        <select
+                          value={nextStatus}
+                          disabled={busy}
+                          aria-label="Next status"
+                          onChange={(event) =>
+                            setNextStatus(event.target.value as DeliveryStatus)
+                          }
+                        >
+                          <option value={row.status}>{statusLabel(row.status)}</option>
+                          {nextStatuses.map((status) => (
+                            <option key={status} value={status}>
+                              {statusLabel(status)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        statusLabel(row.status)
+                      )}
+                    </td>
+                    <td className="numeric">
+                      {formatTime(row.time_window_start)}–{formatTime(row.time_window_end)}
+                    </td>
+                    <td className="row-actions">
+                      {nextStatuses.length === 0 ? null : updating ? (
+                        <>
+                          <button
+                            type="button"
+                            className="ghost"
+                            disabled={busy || nextStatus === row.status}
+                            onClick={() => void confirmUpdate(row)}
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            disabled={busy}
+                            onClick={() => setUpdatingRef(null)}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="ghost"
+                          disabled={pendingRef !== null || saving}
+                          onClick={() => startUpdate(row)}
+                        >
+                          Update
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>

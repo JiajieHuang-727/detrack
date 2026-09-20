@@ -1,6 +1,14 @@
 require "test_helper"
 
 class DeliveryTest < ActiveSupport::TestCase
+  def known_address
+    "25 Pitt St, Hurstville NSW"
+  end
+
+  setup do
+    Address.create!(address: known_address, lat: -33.949285, long: 151.098093)
+  end
+
   def valid_attrs
     {
       reference: "TV-300001",
@@ -46,5 +54,80 @@ class DeliveryTest < ActiveSupport::TestCase
 
     assert_not duplicate.valid?
     assert_includes duplicate.errors.full_messages, "Reference TV-300001 already exists"
+  end
+
+  test "invalid when address is not in addresses" do
+    delivery = Delivery.new(valid_attrs.merge(address: "Unknown St, Sydney NSW"))
+    assert_not delivery.valid?
+    assert_includes delivery.errors[:address], "must match an existing address"
+  end
+
+  test "created can become picked_up or failed" do
+    pickup = Delivery.create!(valid_attrs)
+    assert pickup.update(status: :picked_up)
+
+    failed = Delivery.create!(valid_attrs.merge(reference: "TV-FAIL"))
+    assert failed.update(status: :failed)
+  end
+
+  test "picked_up cannot skip to delivered" do
+    delivery = Delivery.create!(valid_attrs.merge(status: :picked_up, reference: "TV-SKIP"))
+    assert_not delivery.update(status: :delivered)
+    assert_includes delivery.errors[:status], "cannot change from picked_up to delivered"
+  end
+
+  test "delivered cannot change status" do
+    delivery = Delivery.create!(valid_attrs.merge(status: :delivered, reference: "TV-DONE"))
+    assert_not delivery.update(status: :failed)
+    assert_includes delivery.errors[:status], "cannot change from delivered to failed"
+  end
+
+  test "lock reloads status before validating a transition" do
+    delivery = Delivery.create!(valid_attrs.merge(status: :in_transit, reference: "TV-LOCK"))
+    stale = Delivery.find("TV-LOCK")
+    delivery.update!(status: :delivered)
+
+    Delivery.transaction do
+      stale.lock!
+      assert stale.delivered?
+      assert_not stale.update(status: :failed)
+      assert_includes stale.errors[:status], "cannot change from delivered to failed"
+    end
+  end
+
+  test "row lock serializes conflicting status writes" do
+    Delivery.create!(valid_attrs.merge(status: :in_transit, reference: "TV-RACE"))
+
+    locked = Queue.new
+    outcomes = Queue.new
+
+    locker = Thread.new do
+      ApplicationRecord.connection_pool.with_connection do
+        Delivery.transaction do
+          record = Delivery.lock.find("TV-RACE")
+          locked << true
+          sleep 0.15
+          outcomes << [ record.update(status: :delivered), record.status ]
+        end
+      end
+    end
+
+    waiter = Thread.new do
+      locked.pop
+      ApplicationRecord.connection_pool.with_connection do
+        Delivery.transaction do
+          record = Delivery.lock.find("TV-RACE")
+          outcomes << [ record.update(status: :failed), record.status, record.errors[:status] ]
+        end
+      end
+    end
+
+    [ locker, waiter ].each(&:join)
+
+    first, second = outcomes.pop, outcomes.pop
+    assert_equal [ true, "delivered" ], first
+    assert_equal false, second[0]
+    assert_includes second[2], "cannot change from delivered to failed"
+    assert Delivery.find("TV-RACE").delivered?
   end
 end

@@ -2,7 +2,7 @@ module Api
   module V1
     class DeliveriesController < ApplicationController
       def index
-        render json: Delivery.order(created_at: :desc)
+        render json: Delivery.includes(:saved_address).order(created_at: :desc)
       end
 
       def create
@@ -19,6 +19,20 @@ module Api
           status: :unprocessable_content
       end
 
+      def update
+        delivery = Delivery.transaction do
+          record = Delivery.lock.find(params.expect(:id))
+          record.update(status_params)
+          record
+        end
+
+        if delivery.errors.empty?
+          render json: delivery
+        else
+          render json: { errors: delivery.errors.full_messages }, status: :unprocessable_content
+        end
+      end
+
       private
 
       def delivery_params
@@ -29,6 +43,10 @@ module Api
           :time_window_start,
           :time_window_end
         ])
+      end
+
+      def status_params
+        params.expect(delivery: [ :status ])
       end
     end
   end

@@ -1,4 +1,4 @@
-import type { Address, Delivery } from './types'
+import type { Address, Delivery, DeliveryStatus } from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1'
 
@@ -61,6 +61,15 @@ export const addressesApi = {
       method: 'POST',
       body: JSON.stringify({ address: payload }),
     }),
+  update: (id: number, payload: AddressPayload) =>
+    request<Address>(`/addresses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ address: payload }),
+    }),
+  remove: (id: number) =>
+    request<void>(`/addresses/${id}`, {
+      method: 'DELETE',
+    }),
 }
 
 type DeliveryPayload = {
@@ -77,6 +86,11 @@ export const deliveriesApi = {
     request<Delivery>('/deliveries', {
       method: 'POST',
       body: JSON.stringify({ delivery: payload }),
+    }),
+  updateStatus: (reference: string, status: DeliveryStatus) =>
+    request<Delivery>(`/deliveries/${encodeURIComponent(reference)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ delivery: { status } }),
     }),
 }
 

@@ -17,10 +17,20 @@ export const DELIVERY_STATUSES = [
 
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number]
 
+export const DELIVERY_STATUS_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
+  created: ['picked_up', 'failed'],
+  picked_up: ['in_transit', 'failed'],
+  in_transit: ['delivered', 'failed'],
+  delivered: [],
+  failed: [],
+}
+
 export type Delivery = {
   reference: string
   customer_name: string
   address: string
+  lat: string | number | null
+  long: string | number | null
   status: DeliveryStatus
   time_window_start: string | null
   time_window_end: string | null

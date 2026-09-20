@@ -49,4 +49,27 @@ class Api::V1::AddressesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_content
   end
+
+  test "update changes address and coordinates" do
+    record = Address.create!(attrs)
+
+    patch api_v1_address_url(record),
+      params: { address: { address: "191 Pitt St, Parramatta NSW", lat: -33.811836, long: 151.006657 } },
+      as: :json
+
+    assert_response :success
+    record.reload
+    assert_equal "191 Pitt St, Parramatta NSW", record.address
+    assert_equal BigDecimal("-33.811836"), record.lat
+  end
+
+  test "destroy removes the address" do
+    record = Address.create!(attrs)
+
+    assert_difference("Address.count", -1) do
+      delete api_v1_address_url(record)
+    end
+
+    assert_response :no_content
+  end
 end

@@ -155,6 +155,31 @@
   text-align: left;
 }
 
+.ghost.danger:hover {
+  color: #9a3412;
+}
+
+.data-table td input,
+.data-table td select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #cfc0ab;
+  background: #fffdf8;
+  color: inherit;
+}
+
+.data-table td input:focus,
+.data-table td select:focus {
+  outline: 2px solid #9a3412;
+  outline-offset: 1px;
+}
+
+.row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
 @media (max-width: 720px) {
   .page {
     padding-top: 24px;
