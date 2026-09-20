@@ -541,7 +541,7 @@ export function DeliveryPage() {
                         aria-expanded={expanded}
                         onClick={() => toggleHistory(row.reference)}
                       >
-                        View history
+                        {expanded ? 'Close history' : 'View history'}
                       </Button>
                       {nextStatuses.length === 0 ? null : updating ? (
                         <>
