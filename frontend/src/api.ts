@@ -111,7 +111,7 @@ export const addressesApi = {
 type DeliveryPayload = {
   reference: string
   customer_name: string
-  address_id: number
+  address: string
   time_window_start: string
   time_window_end: string
 }
@@ -120,6 +120,8 @@ export type DeliveryListParams = {
   page?: number
   perPage?: number
   status?: DeliveryStatus
+  reference?: string
+  customer?: string
   sort?: string
   dir?: 'asc' | 'desc'
 }
@@ -131,6 +133,8 @@ export const deliveriesApi = {
         page: params.page,
         per_page: params.perPage ?? PAGE_SIZE,
         status: params.status,
+        reference: params.reference,
+        customer: params.customer,
         sort: params.sort,
         dir: params.dir,
       })}`,

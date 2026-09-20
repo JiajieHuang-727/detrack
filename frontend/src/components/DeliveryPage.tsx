@@ -8,12 +8,11 @@ import Form from 'react-bootstrap/Form'
 import Row from 'react-bootstrap/Row'
 import Spinner from 'react-bootstrap/Spinner'
 import Table from 'react-bootstrap/Table'
-import { addressesApi, ApiError, deliveriesApi } from '../api'
+import { ApiError, deliveriesApi } from '../api'
 import {
   DELIVERY_STATUSES,
   DELIVERY_STATUS_TRANSITIONS,
   PAGE_SIZE,
-  type Address,
   type Delivery,
   type DeliveryHistory,
   type DeliveryStatus,
@@ -65,10 +64,9 @@ function StatusBadge({ status }: { status: DeliveryStatus }) {
 
 export function DeliveryPage() {
   const [rows, setRows] = useState<Delivery[]>([])
-  const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
   const [reference, setReference] = useState('')
   const [customerName, setCustomerName] = useState('')
-  const [addressId, setAddressId] = useState<number | "">("")
+  const [address, setAddress] = useState('')
   const [windowStart, setWindowStart] = useState('08:00')
   const [windowEnd, setWindowEnd] = useState('10:00')
   const [loading, setLoading] = useState(true)
@@ -77,7 +75,12 @@ export function DeliveryPage() {
   const [nextStatus, setNextStatus] = useState<DeliveryStatus>('picked_up')
   const [pendingRef, setPendingRef] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [statusDraft, setStatusDraft] = useState<DeliveryStatus | ''>('')
+  const [referenceQuery, setReferenceQuery] = useState('')
+  const [customerQuery, setCustomerQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<DeliveryStatus | ''>('')
+  const [referenceFilter, setReferenceFilter] = useState('')
+  const [customerFilter, setCustomerFilter] = useState('')
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [page, setPage] = useState(1)
@@ -97,6 +100,8 @@ export function DeliveryPage() {
       page: pageNum,
       perPage: PAGE_SIZE,
       status: statusFilter || undefined,
+      reference: referenceFilter || undefined,
+      customer: customerFilter || undefined,
       sort: sortKey ?? undefined,
       dir: sortKey ? sortDirection : undefined,
     })
@@ -104,22 +109,13 @@ export function DeliveryPage() {
     setPage(result.page)
     setTotal(result.total)
     setTotalPages(result.total_pages)
-  }, [page, statusFilter, sortKey, sortDirection])
-
-  const loadAddresses = useCallback(async () => {
-    const addresses = await addressesApi.list({ page: 1, perPage: 100 })
-    setSavedAddresses(addresses.items)
-    setAddressId((current) => {
-      if (current && addresses.items.some((item) => item.id === current)) return current
-      return addresses.items[0]?.id ?? ""
-    })
-  }, [])
+  }, [page, statusFilter, referenceFilter, customerFilter, sortKey, sortDirection])
 
   const load = useCallback(async () => {
     setError(null)
     setLoading(true)
     try {
-      await Promise.all([loadDeliveries(), loadAddresses()])
+      await loadDeliveries()
     } catch (cause) {
       setError(
         cause instanceof ApiError
@@ -129,17 +125,7 @@ export function DeliveryPage() {
     } finally {
       setLoading(false)
     }
-  }, [loadAddresses, loadDeliveries])
-
-  useEffect(() => {
-    void loadAddresses().catch((cause) => {
-      setError(
-        cause instanceof ApiError
-          ? cause.message
-          : 'Could not reach the Rails API. Is it running on port 3000?',
-      )
-    })
-  }, [loadAddresses])
+  }, [loadDeliveries])
 
   useEffect(() => {
     let cancelled = false
@@ -176,11 +162,20 @@ export function DeliveryPage() {
     return sortKey === key ? sortDirection : null
   }
 
+  function searchDeliveries(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setStatusFilter(statusDraft)
+    setReferenceFilter(referenceQuery.trim())
+    setCustomerFilter(customerQuery.trim())
+    setPage(1)
+  }
+
+  const hasActiveFilters = Boolean(statusFilter || referenceFilter || customerFilter)
+
   const canSubmit =
     reference.trim().length > 0 &&
     customerName.trim().length > 0 &&
-    addressId !== "" &&
-    savedAddresses.some((item) => item.id === addressId) &&
+    address.trim().length > 0 &&
     !saving
 
   async function addDelivery(event: FormEvent<HTMLFormElement>) {
@@ -193,14 +188,14 @@ export function DeliveryPage() {
       await deliveriesApi.create({
         reference: reference.trim(),
         customer_name: customerName.trim(),
-        address_id: Number(addressId),
+        address: address.trim(),
         time_window_start: windowStart,
         time_window_end: windowEnd,
       })
       await loadDeliveries(1)
       setReference('')
       setCustomerName('')
-      setAddressId(savedAddresses[0]?.id ?? "")
+      setAddress('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save that delivery.')
     } finally {
@@ -301,23 +296,13 @@ export function DeliveryPage() {
             <Col lg>
               <Form.Group controlId="new-delivery-address">
                 <Form.Label>Address</Form.Label>
-                <Form.Select
-                  value={addressId === "" ? "" : String(addressId)}
-                  disabled={saving || savedAddresses.length === 0}
-                  onChange={(event) =>
-                    setAddressId(event.target.value === "" ? "" : Number(event.target.value))
-                  }
-                >
-                  {savedAddresses.length === 0 ? (
-                    <option value="">Add an address first</option>
-                  ) : (
-                    savedAddresses.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.address}
-                      </option>
-                    ))
-                  )}
-                </Form.Select>
+                <Form.Control
+                  value={address}
+                  placeholder="25 Pitt St, Hurstville NSW"
+                  autoComplete="off"
+                  disabled={saving}
+                  onChange={(event) => setAddress(event.target.value)}
+                />
               </Form.Group>
             </Col>
             <Col lg={2} md={3} sm={6}>
@@ -359,25 +344,58 @@ export function DeliveryPage() {
       </Card.Body>
 
       <Card.Body className="border-bottom py-3">
-        <Form.Group controlId="status-filter" className="d-flex align-items-center gap-2 mb-0">
-          <Form.Label className="mb-0">Status</Form.Label>
-          <Form.Select
-            value={statusFilter}
-            style={{ maxWidth: 220 }}
-            aria-label="Filter deliveries by status"
-            onChange={(event) => {
-              setStatusFilter((event.target.value || '') as DeliveryStatus | '')
-              setPage(1)
-            }}
-          >
-            <option value="">All</option>
-            {DELIVERY_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {statusLabel(status)}
-              </option>
-            ))}
-          </Form.Select>
-        </Form.Group>
+        <Form onSubmit={searchDeliveries}>
+          <Row className="g-2 align-items-end">
+            <Col md={3} sm={6}>
+              <Form.Group controlId="reference-filter">
+                <Form.Label>Reference</Form.Label>
+                <Form.Control
+                  value={referenceQuery}
+                  placeholder="All"
+                  autoComplete="off"
+                  aria-label="Filter deliveries by reference"
+                  onChange={(event) => setReferenceQuery(event.target.value)}
+                />
+              </Form.Group>
+            </Col>
+            <Col md={3} sm={6}>
+              <Form.Group controlId="customer-filter">
+                <Form.Label>Customer</Form.Label>
+                <Form.Control
+                  value={customerQuery}
+                  placeholder="All"
+                  autoComplete="off"
+                  aria-label="Filter deliveries by customer"
+                  onChange={(event) => setCustomerQuery(event.target.value)}
+                />
+              </Form.Group>
+            </Col>
+            <Col md={3} sm={6}>
+              <Form.Group controlId="status-filter">
+                <Form.Label>Status</Form.Label>
+                <Form.Select
+                  value={statusDraft}
+                  aria-label="Filter deliveries by status"
+                  onChange={(event) =>
+                    setStatusDraft((event.target.value || '') as DeliveryStatus | '')
+                  }
+                >
+                  <option value="">All</option>
+                  {DELIVERY_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {statusLabel(status)}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+            </Col>
+            <Col md="auto">
+              <Button type="submit" variant="outline-primary">
+                Search
+              </Button>
+            </Col>
+          </Row>
+        </Form>
       </Card.Body>
 
       {error && (
@@ -470,8 +488,8 @@ export function DeliveryPage() {
           ) : rows.length === 0 ? (
             <tr>
               <td colSpan={8} className="text-secondary py-4">
-                {statusFilter
-                  ? `No deliveries with status ${statusLabel(statusFilter)}.`
+                {hasActiveFilters
+                  ? 'No deliveries match those filters.'
                   : 'Nothing stored yet. Use the form above to add the first row.'}
               </td>
             </tr>

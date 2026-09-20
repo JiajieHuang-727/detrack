@@ -59,7 +59,7 @@ function App() {
     <Container className="page py-4 py-md-5">
       <div className="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
         <div>
-          <p className="eyebrow mb-2">React · Rails · PostgreSQL</p>
+          <p className="eyebrow mb-2">Delivery Status Tracker</p>
           <Nav
             variant="tabs"
             activeKey={activeTab}
